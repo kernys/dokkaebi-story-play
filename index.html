@@ -1,0 +1,37 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>도깨비 스토리</title>
+<style>
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:#172234;color:#fff3da;font:16px system-ui,sans-serif}body{overflow:hidden}canvas{width:100%;height:100%;display:block;outline:none;touch-action:none}#unity-loading-bar{position:absolute;inset:0;display:grid;place-content:center;background:radial-gradient(ellipse at top,#344557,#142032 72%)}form{width:min(19rem,84vw);display:grid;gap:12px}h1{font-family:serif;margin:0 0 14px}label{color:#ead9bb}input,button{font:inherit;padding:.8rem;border-radius:7px}input{background:#192633;color:white;border:1px solid #a9adad}button{background:#edcd94;color:#382e26;border:0;font-weight:700;cursor:pointer}p{margin:0;min-height:1.5rem;color:#efd4af}
+</style>
+<canvas id="game" tabindex="0" aria-label="도깨비 스토리 게임"></canvas>
+<div id="unity-loading-bar"><form><h1>도깨비 스토리</h1><label for="pw">입장 암호</label><input id="pw" type="password" autocomplete="current-password" required><button>마을 입장</button><p role="status" aria-live="polite"></p></form></div>
+<script>
+const form=document.querySelector('form'),statusText=document.querySelector('[role=status]'),input=document.querySelector('input'),btn=document.querySelector('button');
+const decode=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+let key,manifest;
+navigator.serviceWorker?.addEventListener('message',event=>{
+ if(event.source!==navigator.serviceWorker.controller||event.data?.type!=='game-file')return;
+ const file=manifest?.files[event.data.name];
+ event.ports[0]?.postMessage(key && typeof file==='string'?{file,key}:null);
+});
+form.onsubmit=async event=>{
+ event.preventDefault();btn.disabled=true;statusText.textContent='암호를 확인하고 있어요…';
+ try{
+ manifest=await (await fetch('game.json',{cache:'no-store'})).json();
+ const seed=await crypto.subtle.importKey('raw',new TextEncoder().encode(input.value),'PBKDF2',false,['deriveKey']);
+ const candidate=await crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt:decode(manifest.salt),iterations:manifest.rounds},seed,{name:'AES-GCM',length:256},false,['decrypt']);
+ const check=decode(manifest.check);
+ try{await crypto.subtle.decrypt({name:'AES-GCM',iv:check.slice(0,12)},candidate,check.slice(12));}
+ catch{statusText.textContent='암호가 맞지 않아요.';input.select();return;}
+ key=candidate;input.value='';
+ await navigator.serviceWorker.register('sw.js');await navigator.serviceWorker.ready;
+ if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));
+ const script=document.createElement('script');script.src='play/Build/WebGL.loader.js';
+ await new Promise((resolve,reject)=>{script.onload=resolve;script.onerror=reject;document.head.appendChild(script)});
+ const canvas=document.querySelector('canvas');input.disabled=true;
+ await createUnityInstance(canvas,{dataUrl:'play/Build/WebGL.data.unityweb',frameworkUrl:'play/Build/WebGL.framework.js.unityweb',codeUrl:'play/Build/WebGL.wasm.unityweb',streamingAssetsUrl:'play/StreamingAssets',companyName:'Moonlit Grove',productName:'Dokkaebi Story',productVersion:'0.2.0',devicePixelRatio:Math.min(devicePixelRatio||1,1.5),cacheControl:()=> 'no-store'},p=>statusText.textContent='달빛마루에 들어가는 중… '+Math.round(100*p)+'%');
+ document.querySelector('#unity-loading-bar').style.display='none';canvas.focus();
+ }catch(e){key=null;input.disabled=false;statusText.textContent='게임을 열지 못했어요. 새로고침 후 다시 시도해 주세요.';console.error(e);}
+ finally{btn.disabled=false;}
+};
+</script></html>
