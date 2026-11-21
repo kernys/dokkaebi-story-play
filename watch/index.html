@@ -1,0 +1,23 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>도깨비 스토리 · 플레이 영상</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100svh;display:grid;place-items:center;background:#101729;color:#fbf1dd;font:16px/1.55 system-ui,sans-serif;padding:18px}main{width:min(100%,854px)}h1{margin:0;font-size:1.5rem}p{color:#c7c8da;margin:.3rem 0 1rem}form{max-width:24rem}label{display:block;margin-bottom:.35rem}input,button,a{font:inherit}input,button{padding:.7rem;border-radius:8px;border:1px solid #848296}input{width:100%;background:#202b40;color:white}button{margin:.7rem 0;background:#f3c775;color:#191820;cursor:pointer}video{background:#050710;width:100%;aspect-ratio:16/9;border-radius:10px}a{color:#f3c775}#status{min-height:1.6em}
+</style><main><h1>달빛마루에서 도깨비고개까지</h1><p>도깨비 스토리 플레이 영상 · 30초</p>
+<form id="gate"><label for="pw">플레이테스트 비밀번호</label><input id="pw" type="password" inputmode="numeric" required autocomplete="off"><button id="open" type="submit">영상 열기</button></form>
+<section id="clip" hidden><video controls playsinline preload="metadata"></video><a download="도깨비스토리-플레이.mp4">MP4 저장</a></section><p role="status" id="status"></p></main>
+<script>
+const gate=document.querySelector('form'),clip=document.querySelector('#clip'),statusLine=document.querySelector('#status'),button=document.querySelector('button');
+gate.onsubmit=async e=>{
+ e.preventDefault();button.disabled=true;statusLine.textContent='영상을 여는 중이에요…';
+ try{
+  const response=await fetch('./clip.bin');if(!response.ok)throw Error('fetch');
+  const bytes=new Uint8Array(await response.arrayBuffer());
+  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(document.querySelector('#pw').value),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt:bytes.subarray(0,16),iterations:600000},material,{name:'AES-GCM',length:256},false,['decrypt']);
+  const data=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes.subarray(16,28)},key,bytes.subarray(28));
+  const url=URL.createObjectURL(new Blob([data],{type:'video/mp4'}));
+  clip.querySelector('video').src=url;clip.querySelector('a').href=url;clip.hidden=false;gate.reset();gate.hidden=true;statusLine.textContent='';
+ }catch(err){statusLine.textContent=err.name==='OperationError'?'비밀번호를 다시 확인해 주세요.':'영상을 열 수 없어요. Safari나 Chrome에서 다시 시도해 주세요.';}
+ finally{button.disabled=false;}
+};
+</script></html>
